@@ -12,20 +12,12 @@
  */
 const SteamUser = require("steam-user");
 const { readFileSync, writeFileSync } = require("fs");
+const config = require('./config')
 
-/**
- * Initialize a new SteamUser instance with specific settings.
- * - autoRelogin: Disable automatic re-login to allow custom handling.
- * - renewRefreshTokens: Automatically renew refresh tokens when needed.
- */
 let client = new SteamUser({ autoRelogin: false, renewRefreshTokens: true });
 let logOnOptions = {};
 let reconnectAttempts = 0;
 
-/**
- * Try to read the refresh token from the file system.
- * If a token is found, use it for login; otherwise, fallback to using account credentials.
- */
 try {
   let refreshToken = readFileSync("refresh_token.txt").toString("utf8").trim();
   logOnOptions = { refreshToken };
@@ -35,30 +27,25 @@ try {
     "No refresh token saved. Logging on with account name and password."
   );
   logOnOptions = {
-    accountName: "", // steam user
-    password: "", // steam password
+    accountName: config.accountName,
+    password: config.accountPasswd
   };
 }
 
-/**
- * Log on to Steam using either a refresh token or account credentials.
- */
 client.logOn(logOnOptions);
 
-/**
- * Helper function to get the current date and time for logging purposes.
- * @returns {Date} - The current date and time.
- */
 function getUptime() {
-  let time = new Date();
-  time = time.getHours + time.getMinutes + time.getSeconds
-  return time;
+  const date = new Date();
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  
+  let time = `${hours}:${minutes}:${seconds}`;
+  
+  return time
 }
 
-/**
- * Event handler for successful Steam login.
- * Sets the user's status to 'Online' and starts idling in specific games.
- */
 client.on("loggedOn", () => {
   console.log(
     `[${getUptime()}]`,
@@ -67,23 +54,16 @@ client.on("loggedOn", () => {
     client.steamID.getSteamID64()
   );
   client.setPersona(SteamUser.EPersonaState.Online);
-  client.gamesPlayed([730]); // Game IDs to idle
+  client.gamesPlayed(config.gamesToIdle); // Game IDs to idle
   console.log(`[${getUptime()}]`, "[APP]", "Starting idling");
 });
 
-/**
- * Event handler for receiving a new refresh token.
- * The token is saved to 'refresh_token.txt' for future logins without credentials.
- */
 client.on("refreshToken", (token) => {
   console.log(`[${getUptime()}]`, "Got new refresh token");
   writeFileSync("refresh_token.txt", token);
 });
 
-/**
- * Event handler for receiving a message from a Steam friend.
- * Logs the message sender's Steam ID and the message content.
- */
+
 client.on("friendMessage", (steamID, message) => {
   console.log(
     `[${getUptime()}]`,
@@ -95,10 +75,6 @@ client.on("friendMessage", (steamID, message) => {
    */
 });
 
-/**
- * Event handler for Steam disconnection.
- * Logs the disconnection, increments the reconnect attempt counter, and triggers a reconnection attempt.
- */
 client.on("disconnected", (eresult, message) => {
   console.log(`[${getUptime()}]`, "Client Disconnected:", eresult, message);
   reconnectAttempts++;
@@ -133,17 +109,26 @@ async function retryConnection() {
           err.message
         );
       }
-    }, 1000 * 120); // Retry after 2 minutes ( we multiply 120ms with 1000ms to calc 2min )
+    }, 300000);
   });
 }
 
 /**
- * Event handler for Steam client errors.
- * Handles network errors or specific Steam result codes by attempting to reconnect.
+ * Handle connection errors, such as getaddrinfo EAI_AGAIN or any similar temporary network issues.
+ * EAI_AGAIN means a temporary DNS resolution issue, so we implement a retry mechanism.
  */
 client.on("error", (err) => {
   console.error(`[${getUptime()}]`, "Client error:", err.message);
-  if (err.message.includes("getaddrinfo ENOTFOUND") || err.eresult === 3) {
+  
+  // If the error is EAI_AGAIN, retry after a short delay (10 seconds)
+  if (err.message.includes("getaddrinfo EAI_AGAIN")) {
+    console.log(`[${getUptime()}]`, "Temporary DNS resolution issue. Retrying in 10 seconds...");
+    
+    // Retry the connection after 10 seconds
+    setTimeout(() => {
+      retryConnection();
+    }, 10000);  // 10 seconds delay
+  } else if (err.message.includes("getaddrinfo ENOTFOUND") || err.eresult === 3) {
     retryConnection();
   }
 });
