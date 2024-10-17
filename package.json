@@ -1,0 +1,17 @@
+{
+  "name": "steambot",
+  "version": "1.0.0",
+  "description": "A Basic Staem Hour Farm Bot",
+  "main": "main.js",
+  "scripts": {
+    "test": "nodemon src/main.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fs": "^0.0.1-security",
+    "nodemon": "^3.1.7",
+    "steam-totp": "^2.1.2",
+    "steam-user": "5.2.0"
+  }
+}
